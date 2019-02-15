@@ -1,0 +1,29 @@
+#Build a image. Dockerfile will be used as the default config file
+docker build --tag=ub16.04:v1 .
+
+#Or specify a Dockerfile to buld against (tensorflow with gpu capabilities)
+docker build --file Dockerfile.gpu --tag=ubtfgpu16.04:v1 .
+
+#Different Dockerfile (tensorflow with just cpu capabilities)
+docker build --file Dockerfile.cpu --tag=ubtfcpu16.04:v1 .
+
+#Run the container mounting your home area
+docker run -it --name homearea -v /home/$USERNAME:/home/$USERNAME -v /etc/passwd:/etc/passwd -v /etc/group:/etc/group --user $(id -u):$(id -g)  ub16.04:v1
+
+#If you want to save you image from the local repo
+docker save -o ubuntu-py3.tar ub16.04:v1
+
+#Clean up
+#First the containers
+docker container rm $(docker container ls -a -q)
+
+#Then the images
+docker image rm $(docker image ls -a -q)
+
+docker build --tag=ubuntumlenv:v1 .
+docker build --file Dockerfile.gpu --tag=ub16.04:v1 .
+docker run -ti --user $(id -u):$(id -g) --mount source=myvol2,target=/home/olaiya ubuntumlenv:v1
+docker run -ti --mount source=myvol2,target=/home/$USERNAME ubuntumlenv:v1
+docker run -d -it --name homearea -v /home/$USERNAME:/home/$USERNAME ub:v2
+docker run -it --name homearea -v /home/$USERNAME:/home/$USERNAME -v /etc/passwd:/etc/passwd -v /etc/group:/etc/group --user $(id -u):$(id -g) ubuntumlenv:v1
+docker save -o ubuntu-py3.tar ub16.04:v1
