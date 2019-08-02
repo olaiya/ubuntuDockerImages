@@ -21,9 +21,21 @@ docker container rm $(docker container ls -a -q)
 docker image rm $(docker image ls -a -q)
 
 docker build --tag=ubuntumlenv:v1 .
+docker build --file gpu.Dockerfile --tag=tf-gpu:v4 .
+docker build --file gpu.Dockerfile --build-arg TF_PACKAGE=tf-nightly-gpu --tag=tfnightly-gpu:v1 .
+docker build --file gpu.Dockerfile --build-arg TF_PACKAGE=tensorflow --tag=tf-cpu:v1 .
 docker build --file Dockerfile.gpu --tag=ub16.04:v1 .
 docker run -ti --user $(id -u):$(id -g) --mount source=myvol2,target=/home/olaiya ubuntumlenv:v1
 docker run -ti --mount source=myvol2,target=/home/$USERNAME ubuntumlenv:v1
 docker run -d -it --name homearea -v /home/$USERNAME:/home/$USERNAME ub:v2
 docker run -it --name homearea -v /home/$USERNAME:/home/$USERNAME -v /etc/passwd:/etc/passwd -v /etc/group:/etc/group --user $(id -u):$(id -g) ubuntumlenv:v1
 docker save -o ubuntu-py3.tar ub16.04:v1
+
+
+#Number of layers pushed to repository at a time can be specified in /etc/docker/daemon.json
+
+add the lines:
+
+{
+  "max-concurrent-uploads": 1
+}

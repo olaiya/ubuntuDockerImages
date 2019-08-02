@@ -1,20 +1,25 @@
 FROM ubuntu
 
-RUN apt-get update
-RUN apt-get upgrade -y
+ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get install -y zip unzip
-RUN apt-get install -y python3.6
-RUN apt-get install -y python3-pandas
-RUN apt-get install -y python3-matplotlib
-RUN apt-get install -y python3-scipy
-RUN apt-get install -y python3-sklearn
-RUN apt-get install -y python3-pip
-RUN apt-get install -y python3-dev
+RUN apt-get update && apt-get install -y \
+    python3.6 \
+    python3-dev \
+    python3-matplotlib \
+    python3-numpy \
+    python3-pandas \
+    python3-pip \
+    python3-scipy \
+    python3-sklearn \
+    software-properties-common \
+    zip unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install uproot
 RUN pip3 install -U virtualenv
 
 #TEST Tensorflow build
-RUN apt-get install -y software-properties-common
+#RUN apt-get install -y software-properties-common
 RUN add-apt-repository ppa:graphics-drivers/ppa
 
 RUN apt-key adv --fetch-keys \
