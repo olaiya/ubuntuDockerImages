@@ -1,3 +1,7 @@
+#start docker daemon
+sudo systemctl start docker
+
+
 #Build a image. Dockerfile will be used as the default config file
 docker build --tag=ub16.04:v1 .
 
@@ -21,9 +25,9 @@ docker container rm $(docker container ls -a -q)
 docker image rm $(docker image ls -a -q)
 
 docker build --tag=ubuntumlenv:v1 .
-docker build --file gpu.Dockerfile --tag=tf-gpu:v4 .
+docker build --file gpu.Dockerfile --tag=tf_2.0-gpu:v1 .
 docker build --file gpu.Dockerfile --build-arg TF_PACKAGE=tf-nightly-gpu --tag=tfnightly-gpu:v1 .
-docker build --file gpu.Dockerfile --build-arg TF_PACKAGE=tensorflow --tag=tf-cpu:v1 .
+docker build --file gpu.Dockerfile --build-arg TF_PACKAGE=tensorflow --tag=tf_2.0-cpu:v1 .
 docker build --file Dockerfile.gpu --tag=ub16.04:v1 .
 docker run -ti --user $(id -u):$(id -g) --mount source=myvol2,target=/home/olaiya ubuntumlenv:v1
 docker run -ti --mount source=myvol2,target=/home/$USERNAME ubuntumlenv:v1

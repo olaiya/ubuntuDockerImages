@@ -98,19 +98,31 @@ RUN apt-get update && apt-get install -y \
 RUN ${PIP} --no-cache-dir install \
     Pillow \
     h5py \
+    ipdb \
+    matplotlib \
+    graphviz \
+    jupyter \
     keras_applications \
     keras_preprocessing \
-    matplotlib \
     mock \
+    modin \
+    numba \
     numpy \
+    pandas==0.25.1 \
+    parsl \
+    seaborn \
     scipy \
     sklearn \
-    pandas \
+    tqdm \
     future \
     portpicker \
     uproot     \
+    vtk \
     && test "${USE_PYTHON_3_NOT_2}" -eq 1 && true || ${PIP} --no-cache-dir install \
     enum34
+
+RUN ${PIP} --no-cache-dir install  mayavi
+    
 
 # Options:
 #   tensorflow
