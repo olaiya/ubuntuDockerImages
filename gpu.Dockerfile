@@ -108,7 +108,7 @@ RUN ${PIP} --no-cache-dir install \
     modin \
     numba \
     numpy \
-    pandas==0.25.1 \
+    pandas==1.1.2 \
     parsl \
     seaborn \
     scipy \
@@ -121,7 +121,7 @@ RUN ${PIP} --no-cache-dir install \
     && test "${USE_PYTHON_3_NOT_2}" -eq 1 && true || ${PIP} --no-cache-dir install \
     enum34
 
-RUN ${PIP} --no-cache-dir install  mayavi
+#RUN ${PIP} --no-cache-dir install  mayavi
     
 
 # Options:
@@ -132,8 +132,11 @@ RUN ${PIP} --no-cache-dir install  mayavi
 # Set --build-arg TF_PACKAGE_VERSION=1.11.0rc0 to install a specific version.
 # Installs the latest version by default.
 ARG TF_PACKAGE=tensorflow-gpu
+#ARG TF_PACKAGE=tensorflow
 ARG TF_PACKAGE_VERSION=
 RUN ${PIP} install ${TF_PACKAGE}${TF_PACKAGE_VERSION:+==${TF_PACKAGE_VERSION}}
+#Install graph nets package
+RUN ${PIP} --no-cache-dir install graph_nets "tensorflow_gpu>=2.1.0-rc1" "dm-sonnet>=2.0.0b0" tensorflow_probability
 
 COPY bashrcFiles/bashrc /etc/bash.bashrc
 RUN chmod a+rwx /etc/bash.bashrc
