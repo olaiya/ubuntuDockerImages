@@ -28,6 +28,7 @@ docker build --tag=ubuntumlenv:v1 .
 docker build --file gpu.Dockerfile --tag=tf_2.0-gpu:v1 .
 docker build --file gpu.Dockerfile --build-arg TF_PACKAGE=tf-nightly-gpu --tag=tfnightly-gpu:v1 .
 docker build --file gpu.Dockerfile --build-arg TF_PACKAGE=tensorflow --tag=tf_2.0-cpu:v1 .
+docker build --file gpu.Dockerfile --build-arg TF_PACKAGE=tensorflow-gpu --build-arg TF_PACKAGE_VERSION=2.3.1 --tag=tf_2.3.1-gpu:v1 .
 docker build --file Dockerfile.gpu --tag=ub16.04:v1 .
 docker run -ti --user $(id -u):$(id -g) --mount source=myvol2,target=/home/olaiya ubuntumlenv:v1
 docker run -ti --mount source=myvol2,target=/home/$USERNAME ubuntumlenv:v1
