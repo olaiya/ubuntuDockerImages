@@ -108,20 +108,19 @@ RUN python3 -m pip --no-cache-dir install \
     keras_applications \
     keras_preprocessing \
     mock \
-    modin \
     networkx \
     numba \
     numpy \
-    pandas==1.1.4 \
+    pandas\
     parsl \
     seaborn \
     scipy \
-    sklearn \
+    scikit-learn \
     tqdm \
     future \
     portpicker \
     uproot     \
-    uproot3    \
+    uproot4    \
     vtk \
     enum34
     
@@ -133,7 +132,7 @@ RUN python3 -m pip --no-cache-dir install \
 # Set --build-arg TF_PACKAGE_VERSION=1.11.0rc0 to install a specific version.
 # Installs the latest version by default.
 ARG TF_PACKAGE=tensorflow-gpu
-ARG TF_PACKAGE_VERSION=
+ARG TF_PACKAGE_VERSION=2.6.0
 RUN python3 -m pip install --no-cache-dir ${TF_PACKAGE}${TF_PACKAGE_VERSION:+==${TF_PACKAGE_VERSION}}
 
 #Install graph nets package
