@@ -108,6 +108,7 @@ RUN python3 -m pip --no-cache-dir install \
     ipdb \
     matplotlib \
     graphviz \
+    hls4ml \
     jupyter \
     keras_applications \
     keras_preprocessing \
