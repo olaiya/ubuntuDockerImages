@@ -59,6 +59,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libzmq3-dev \
         pkg-config \
         software-properties-common \
+	gcc-multilib \
+	g++-multilib \
+	libssl-dev \
         unzip
 
 # Install TensorRT if not building for PowerPC
@@ -86,7 +89,6 @@ RUN apt-get update && apt-get install -y \
     python3-pip
 
 RUN python3 -m pip --no-cache-dir install --upgrade \
-    "pip<20.3" \
     setuptools
 
 # Some TF tools expect a "python" binary
@@ -109,6 +111,7 @@ RUN python3 -m pip --no-cache-dir install \
     matplotlib \
     graphviz \
     hls4ml \
+    hist \
     jupyter \
     keras_applications \
     keras_preprocessing \
@@ -138,7 +141,7 @@ RUN python3 -m pip --no-cache-dir install \
 # Set --build-arg TF_PACKAGE_VERSION=1.11.0rc0 to install a specific version.
 # Installs the latest version by default.
 ARG TF_PACKAGE=tensorflow-gpu
-ARG TF_PACKAGE_VERSION=2.6.0
+ARG TF_PACKAGE_VERSION=2.9.1
 RUN python3 -m pip install --no-cache-dir ${TF_PACKAGE}${TF_PACKAGE_VERSION:+==${TF_PACKAGE_VERSION}}
 
 #Install graph nets package
@@ -147,6 +150,20 @@ RUN python3 -m pip --no-cache-dir install graph_nets "tensorflow_gpu>=2.1.0-rc1"
 #Install tendorflow optimisation package
 RUN python3 -m pip --no-cache-dir install --upgrade tensorflow-model-optimization
 
+
+#Install qkeras
+RUN git clone --branch=master https://github.com/google/qkeras.git google/qkeras \
+    && cd google/qkeras \
+#    && git checkout -qf 67e7c6b8cbd6befd594f142187ac4b73b35512ac \
+    && pip install -r requirements.txt \
+    && pip install . \
+    && python setup.py install
+
+
+RUN cd /lib/x86_64-linux-gnu \
+    && ln -s libtinfo.so.6 libtinfo.so.5
+
+#ADD symlinks for vivado to work
 COPY bashrcFiles/bashrc /etc/bash.bashrc
 RUN chmod a+rwx /etc/bash.bashrc
 
