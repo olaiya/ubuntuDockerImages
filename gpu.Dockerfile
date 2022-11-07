@@ -110,7 +110,7 @@ RUN python3 -m pip --no-cache-dir install \
     ipdb \
     matplotlib \
     graphviz \
-    hls4ml \
+#    hls4ml \
     hist \
     jupyter \
     keras_applications \
@@ -141,7 +141,7 @@ RUN python3 -m pip --no-cache-dir install \
 # Set --build-arg TF_PACKAGE_VERSION=1.11.0rc0 to install a specific version.
 # Installs the latest version by default.
 ARG TF_PACKAGE=tensorflow-gpu
-ARG TF_PACKAGE_VERSION=2.9.1
+ARG TF_PACKAGE_VERSION=2.10.0
 RUN python3 -m pip install --no-cache-dir ${TF_PACKAGE}${TF_PACKAGE_VERSION:+==${TF_PACKAGE_VERSION}}
 
 #Install graph nets package
@@ -150,6 +150,12 @@ RUN python3 -m pip --no-cache-dir install graph_nets "tensorflow_gpu>=2.1.0-rc1"
 #Install tendorflow optimisation package
 RUN python3 -m pip --no-cache-dir install --upgrade tensorflow-model-optimization
 
+#Install specific branch of hls4ml
+RUN git clone https://github.com/fastmachinelearning/hls4ml \
+    && cd hls4ml \
+    && git checkout main \
+    && pip install . \
+    && python setup.py install
 
 #Install qkeras
 RUN git clone --branch=master https://github.com/google/qkeras.git google/qkeras \
