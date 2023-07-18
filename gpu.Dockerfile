@@ -1,92 +1,110 @@
-# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ============================================================================
-#
-# THIS IS A GENERATED DOCKERFILE.
-#
-# This file was assembled from multiple pieces, whose use is documented
-# throughout. Please refer to the TensorFlow dockerfiles documentation
-# for more information.
+FROM nvidia/cuda:11.2.2-base-ubuntu20.04 AS base_image
 
-#Tensorflow Dockerfiles can be found here:
-#https://github.com/tensorflow/tensorflow/tree/master/tensorflow/tools/dockerfiles/dockerfiles
+ENV DEBIAN_FRONTEND=noninteractive \
+    LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
 
-ARG UBUNTU_VERSION=20.04
+##Docker config stolen from 
+#https://github.com/aws/deep-learning-containers/blob/master/tensorflow/training/docker/2.11/py3/cu112/Dockerfile.gpu
 
-ARG ARCH=
+RUN apt-get update \
+ && apt-get upgrade -y \
+ && apt-get autoremove -y \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
+
+FROM base_image AS common
+
+LABEL maintainer="Amazon AI"
+LABEL dlc_major_version="1"
+
+# prevent stopping by user interaction
+ENV DEBIAN_FRONTEND noninteractive
+ENV DEBCONF_NONINTERACTIVE_SEEN true
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONIOENCODING=UTF-8
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# Set environment variables for MKL
+# For more about MKL with TensorFlow see:
+# https://www.tensorflow.org/performance/performance_guide#tensorflow_with_intel%C2%AE_mkl_dnn
+ENV KMP_AFFINITY=granularity=fine,compact,1,0
+ENV KMP_BLOCKTIME=1
+ENV KMP_SETTINGS=0
+ENV RDMAV_FORK_SAFE=1
+
+ARG PYTHON=python3.9
+ARG PIP=pip3
+ARG PYTHON_VERSION=3.9.10
+
+ARG OPEN_MPI_PATH=/opt/amazon/openmpi
+ARG EFA_PATH=/opt/amazon/efa
+ARG EFA_VERSION=1.17.2
+ARG OMPI_VERSION=4.1.1
+ARG BRANCH_OFI=1.4.0-aws
+
+#Tensorflow and cuda compatibility
+#https://www.tensorflow.org/install/source#gpu
 ARG CUDA=11.2
-FROM nvidia/cuda${ARCH:+-$ARCH}:${CUDA}.1-base-ubuntu${UBUNTU_VERSION} as base
-# ARCH and CUDA are specified again because the FROM directive resets ARGs
-# (but their default value is retained if set previously)
-ARG ARCH
-ARG CUDA
-ARG CUDNN=8.1.0.77-1
-ARG CUDNN_MAJOR_VERSION=8
-ARG LIB_DIR_PREFIX=x86_64
-ARG LIBNVINFER=7.2.2-1
-ARG LIBNVINFER_MAJOR_VERSION=7
+ARG CUDA_DASH=11-2
+ARG CUDNN=8.2.4.15-1
 
-# Let us install tzdata painlessly
-ENV DEBIAN_FRONTEND=noninteractive
+ARG NCCL_VERSION=2.13.4
 
-# Needed for string substitution
-SHELL ["/bin/bash", "-c"]
-# Pick up some TF dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        cuda-command-line-tools-${CUDA/./-} \
-        libcublas-${CUDA/./-} \
-        cuda-nvrtc-${CUDA/./-} \
-        libcufft-${CUDA/./-} \
-        libcurand-${CUDA/./-} \
-        libcusolver-${CUDA/./-} \
-        libcusparse-${CUDA/./-} \
-        curl \
-        libcudnn8=${CUDNN}+cuda${CUDA} \
-        libfreetype6-dev \
-        libhdf5-serial-dev \
-        libzmq3-dev \
-        pkg-config \
-        software-properties-common \
-	gcc-multilib \
-	g++-multilib \
-	libssl-dev \
-        unzip
+# To be passed to ec2 and sagemaker stages
+ENV PYTHON=${PYTHON}
+ENV PYTHON_VERSION=${PYTHON_VERSION}
+ENV PIP=${PIP}
 
-# Install TensorRT if not building for PowerPC
-# NOTE: libnvinfer uses cuda11.1 versions
-RUN [[ "${ARCH}" = "ppc64le" ]] || { apt-get update && \
-        apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64/7fa2af80.pub && \
-        echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64 /"  > /etc/apt/sources.list.d/tensorRT.list && \
-        apt-get update && \
-        apt-get install -y --no-install-recommends libnvinfer${LIBNVINFER_MAJOR_VERSION}=${LIBNVINFER}+cuda11.0 \
-        libnvinfer-plugin${LIBNVINFER_MAJOR_VERSION}=${LIBNVINFER}+cuda11.0 \
-        && apt-get clean \
-        && rm -rf /var/lib/apt/lists/*; }
-
-# For CUDA profiling, TensorFlow requires CUPTI.
-ENV LD_LIBRARY_PATH /usr/local/cuda-11.0/targets/x86_64-linux/lib:/usr/local/cuda/extras/CUPTI/lib64:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
-
-
-# Link the libcuda stub to the location where tensorflow is searching for it and reconfigure
-# dynamic linker run-time bindings
-RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 \
-    && echo "/usr/local/cuda/lib64/stubs" > /etc/ld.so.conf.d/z-cuda-stubs.conf \
-    && ldconfig
-
-# See http://bugs.python.org/issue19846
-ENV LANG C.UTF-8
+RUN apt-get update && apt-get install -y --no-install-recommends --allow-unauthenticated --allow-downgrades  --allow-change-held-packages \
+   ca-certificates \
+   cuda-command-line-tools-${CUDA_DASH} \
+   cuda-cudart-dev-${CUDA_DASH} \
+   libcufft-dev-${CUDA_DASH} \
+   libcurand-dev-${CUDA_DASH} \
+   libcusolver-dev-${CUDA_DASH} \
+   libcusparse-dev-${CUDA_DASH} \
+   curl \
+   emacs \
+   libcudnn8=${CUDNN}+cuda11.4 \
+   libgomp1 \
+   libfreetype6-dev \
+   libhdf5-serial-dev \
+   liblzma-dev \
+   libpng-dev \
+   libtemplate-perl \
+   libzmq3-dev \
+   hwloc \
+   git \
+   unzip \
+   wget \
+   libtool \
+   vim \
+   libssl1.1 \
+   openssl \
+   build-essential \
+   openssh-client \
+   openssh-server \
+   zlib1g-dev \
+   # Install dependent library for OpenCV
+   libgtk2.0-dev \
+   jq \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends --allow-unauthenticated --allow-change-held-packages \
+   libcublas-dev-${CUDA_DASH} \
+   libcublas-${CUDA_DASH} \
+   # The 'apt-get install' of nvinfer-runtime-trt-repo-ubuntu1804-5.0.2-ga-cuda10.0
+   # adds a new list which contains libnvinfer library, so it needs another
+   # 'apt-get update' to retrieve that list before it can actually install the
+   # library.
+   # We don't install libnvinfer-dev since we don't need to build against TensorRT,
+   # and libnvinfer4 doesn't contain libnvinfer.a static library.
+   # nvinfer-runtime-trt-repo doesn't have a 1804-cuda10.1 version yet. see:
+   # https://developer.download.nvidia.cn/compute/machine-learning/repos/ubuntu1804/x86_64/
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /var/run/sshd
 
 RUN apt-get update && apt-get install -y \
     python3 \
@@ -114,7 +132,6 @@ RUN python3 -m pip --no-cache-dir install \
     ipdb \
     matplotlib \
     graphviz \
-#    hls4ml \
     hist \
     jupyter \
     keras_applications \
@@ -145,7 +162,7 @@ RUN python3 -m pip --no-cache-dir install \
 # Set --build-arg TF_PACKAGE_VERSION=1.11.0rc0 to install a specific version.
 # Installs the latest version by default.
 ARG TF_PACKAGE=tensorflow-gpu
-ARG TF_PACKAGE_VERSION=2.10.0
+ARG TF_PACKAGE_VERSION=2.11.0
 RUN python3 -m pip install --no-cache-dir ${TF_PACKAGE}${TF_PACKAGE_VERSION:+==${TF_PACKAGE_VERSION}}
 
 #Install graph nets package
@@ -164,11 +181,11 @@ RUN git clone https://github.com/fastmachinelearning/hls4ml \
 #Install qkeras
 RUN git clone --branch=master https://github.com/google/qkeras.git google/qkeras \
     && cd google/qkeras \
-#    && git checkout -qf 67e7c6b8cbd6befd594f142187ac4b73b35512ac \
-    && pip install -r requirements.txt \
     && pip install . \
     && python setup.py install
 
+
+RUN pip install protobuf==3.19.*
 
 RUN cd /lib/x86_64-linux-gnu \
     && ln -s libtinfo.so.6 libtinfo.so.5
@@ -176,4 +193,3 @@ RUN cd /lib/x86_64-linux-gnu \
 #ADD symlinks for vivado to work
 COPY bashrcFiles/bashrc /etc/bash.bashrc
 RUN chmod a+rwx /etc/bash.bashrc
-
