@@ -1,7 +1,17 @@
-FROM nvidia/cuda:11.8.0-base-ubuntu20.04 AS base_image
+#https://github.com/tensorflow/build/blob/fdd023ef684d62b2f76f0ab5ebcffda19d982a21/tensorflow_runtime_dockerfiles/gpu.Dockerfile
+#https://gist.github.com/Cyril-Meyer/85ac02355e41437626772fa3741a1935
+#https://www.tensorflow.org/install/source#gpu
+#https://developer.nvidia.com/cuda-12-3-0-download-archive?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=22.04&target_type=deb_network
+#https://developer.nvidia.com/cudnn-archive
+#https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/
+
+FROM nvidia/cuda:12.3.0-base-ubuntu22.04 AS base_image
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
+    LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib:/usr/local/cuda/lib64/stubs:/usr/local/cuda-12.3/lib64/stubs:/usr/local/cuda-12.3/lib64:"
+
+##Docker config stolen from 
+#https://github.com/aws/deep-learning-containers/blob/master/tensorflow/training/docker/2.11/py3/cu112/Dockerfile.gpu
 
 RUN apt-get update \
  && apt-get upgrade -y \
@@ -14,9 +24,6 @@ FROM base_image AS common
 LABEL maintainer="Amazon AI"
 LABEL dlc_major_version="1"
 
-# TensorFlow major.minor version
-ENV TF_VERSION=2.13
-
 # prevent stopping by user interaction
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
@@ -27,29 +34,17 @@ ENV PYTHONIOENCODING=UTF-8
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
-# Set environment variables for MKL
-# For more about MKL with TensorFlow see:
-# https://www.tensorflow.org/performance/performance_guide#tensorflow_with_intel%C2%AE_mkl_dnn
-ENV KMP_AFFINITY=granularity=fine,compact,1,0
-ENV KMP_BLOCKTIME=1
-ENV KMP_SETTINGS=0
-ENV RDMAV_FORK_SAFE=1
-
-ARG PYTHON=python3.10
+ARG PYTHON=python3.9
 ARG PIP=pip3
-ARG PYTHON_VERSION=3.10.12
+ARG PYTHON_VERSION=3.9.10
 
-ARG OPEN_MPI_PATH=/opt/amazon/openmpi
-ARG EFA_PATH=/opt/amazon/efa
-ARG EFA_VERSION=1.24.0
-ARG OMPI_VERSION=4.1.5
-ARG BRANCH_OFI=1.5.0-aws
-
-
-ARG CUDA=11.8
-ARG CUDA_DASH=11-8
-ARG CUDNN=8.9.3.28-1
-ARG NCCL_VERSION=2.16.5
+#Tensorflow and cuda compatibility
+#https://www.tensorflow.org/install/source#gpu
+#Check available cuda packages for ubunt here:
+#https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/
+ARG CUDA=12.3
+ARG CUDA_DASH=12-3
+ARG CUDNN=8.9.7.29-1
 
 # To be passed to ec2 and sagemaker stages
 ENV PYTHON=${PYTHON}
@@ -60,14 +55,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends --allow-unauthe
    ca-certificates \
    cuda-command-line-tools-${CUDA_DASH} \
    cuda-cudart-dev-${CUDA_DASH} \
-   cuda-nvcc-${CUDA_DASH} \
    libcufft-dev-${CUDA_DASH} \
    libcurand-dev-${CUDA_DASH} \
    libcusolver-dev-${CUDA_DASH} \
    libcusparse-dev-${CUDA_DASH} \
    curl \
    emacs \
-   libcudnn8=${CUDNN}+cuda11.8 \
+   libcudnn8=${CUDNN}+cuda12.2 \
    libgomp1 \
    libfreetype6-dev \
    libhdf5-serial-dev \
@@ -81,7 +75,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends --allow-unauthe
    wget \
    libtool \
    vim \
-   libssl1.1 \
    openssl \
    build-essential \
    openssh-client \
@@ -94,36 +87,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends --allow-unauthe
  && apt-get install -y --no-install-recommends --allow-unauthenticated --allow-change-held-packages \
    libcublas-dev-${CUDA_DASH} \
    libcublas-${CUDA_DASH} \
-   libnccl2=2.16.5-1+cuda11.8 \
-   libnccl-dev=2.16.5-1+cuda11.8 \
+   # The 'apt-get install' of nvinfer-runtime-trt-repo-ubuntu1804-5.0.2-ga-cuda10.0
+   # adds a new list which contains libnvinfer library, so it needs another
+   # 'apt-get update' to retrieve that list before it can actually install the
+   # library.
+   # We don't install libnvinfer-dev since we don't need to build against TensorRT,
+   # and libnvinfer4 doesn't contain libnvinfer.a static library.
+   # nvinfer-runtime-trt-repo doesn't have a 1804-cuda10.1 version yet. see:
+   # https://developer.download.nvidia.cn/compute/machine-learning/repos/ubuntu1804/x86_64/
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /var/run/sshd
 
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip
 
-# Install EFA without AWS OPEN_MPI
-RUN apt-get update \
-  && mkdir /tmp/efa \
-  && cd /tmp/efa \
-  && curl -O https://s3-us-west-2.amazonaws.com/aws-efa-installer/aws-efa-installer-${EFA_VERSION}.tar.gz \
-  && tar -xf aws-efa-installer-${EFA_VERSION}.tar.gz \
-  && cd aws-efa-installer \
-  && ./efa_installer.sh -y --skip-kmod -g \
-  && rm -rf $OPEN_MPI_PATH \
-  && rm -rf /tmp/efa \
-  && rm -rf /tmp/aws-efa-installer-${EFA_VERSION}.tar.gz \
-  && rm -rf /var/lib/apt/lists/*
+RUN python3 -m pip --no-cache-dir install --upgrade \
+    setuptools
 
-# Install OpenMPI without libfabric support
-RUN mkdir /tmp/openmpi \
- && cd /tmp/openmpi \
- && wget --quiet https://download.open-mpi.org/release/open-mpi/v4.1/openmpi-${OMPI_VERSION}.tar.gz \
- && tar zxf openmpi-${OMPI_VERSION}.tar.gz \
- && cd openmpi-${OMPI_VERSION} \
- && ./configure --enable-orterun-prefix-by-default --prefix=$OPEN_MPI_PATH \
- && make -j $(nproc) all \
- && make install \
- && ldconfig \
- && rm -rf /tmp/openmpi
+# Some TF tools expect a "python" binary
+RUN ln -s $(which python3) /usr/local/bin/python
 
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -131,100 +114,11 @@ RUN apt-get update && apt-get install -y \
     git \
     wget \
     openjdk-8-jdk \
+    python3-dev \
     virtualenv \
     swig
     
-###########################################################################
-# Horovod & its dependencies
-###########################################################################
-
-# Create a wrapper for OpenMPI to allow running as root by default
-RUN mv $OPEN_MPI_PATH/bin/mpirun $OPEN_MPI_PATH/bin/mpirun.real \
- && echo '#!/bin/bash' > $OPEN_MPI_PATH/bin/mpirun \
- && echo 'mpirun.real --allow-run-as-root "$@"' >> $OPEN_MPI_PATH/bin/mpirun \
- && chmod a+x $OPEN_MPI_PATH/bin/mpirun
-
-# Configure OpenMPI to run good defaults:
-#   --bind-to none --map-by slot --mca btl_tcp_if_exclude lo,docker0
-RUN echo "hwloc_base_binding_policy = none" >> $OPEN_MPI_PATH/etc/openmpi-mca-params.conf \
- && echo "rmaps_base_mapping_policy = slot" >> $OPEN_MPI_PATH/etc/openmpi-mca-params.conf
-
-# Set default NCCL parameters
-RUN echo NCCL_DEBUG=INFO >> /etc/nccl.conf
-ENV LD_LIBRARY_PATH=$OPEN_MPI_PATH/lib/:$EFA_PATH/lib/:$LD_LIBRARY_PATH
-# /usr/local/lib/libpython* needs to be accessible for dynamic linking
-ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
-ENV PATH=$OPEN_MPI_PATH/bin/:$PATH
-ENV PATH=$OPEN_MPI_PATH/nvidia/bin:$PATH
-
-# SSH login fix. Otherwise user is kicked off after login
-RUN mkdir -p /var/run/sshd \
-   && sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
-
-# Create SSH key.
-RUN mkdir -p /root/.ssh/ \
-   && ssh-keygen -q -t rsa -N '' -f /root/.ssh/id_rsa \
-   && cp /root/.ssh/id_rsa.pub /root/.ssh/authorized_keys \
-   && printf "Host *\n  StrictHostKeyChecking no\n" >> /root/.ssh/config
-
-WORKDIR /
-
-RUN apt-get update \
-   && apt-get install -y --no-install-recommends \
-   libbz2-dev \
-   libc6-dev \
-   libcurl4-openssl-dev \
-   libffi-dev \
-   libgdbm-dev \
-   libncursesw5-dev \
-   libreadline-gplv2-dev \
-   libsqlite3-dev \
-   libssl-dev \
-   tk-dev \
-   ffmpeg \
-   libsm6 \
-   libxext6 \
-   # remove libsasl2-2 after Nvidia docker upstream fix CVE-2022-24407
-   && rm -rf /var/lib/apt/lists/* \
-   && apt-get clean
-
-RUN wget https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tgz \
-   && tar -xvf Python-$PYTHON_VERSION.tgz \
-   && cd Python-$PYTHON_VERSION \
-   && ./configure --enable-shared \
-   && make -j $(nproc) \
-   && make install \
-   && rm -rf ../Python-$PYTHON_VERSION*
-
-RUN ${PIP} --no-cache-dir install --upgrade \
-   pip \
-   setuptools \
-   wheel
-
-# Some TF tools expect a "python" binary
-RUN ln -s $(which ${PYTHON}) /usr/local/bin/python \
-   && ln -s $(which ${PIP}) /usr/bin/pip
-
-RUN apt-get update && apt-get -y install protobuf-compiler
-
-RUN ${PIP} install --no-cache-dir -U \
-   pybind11 \
-   cmake \
-   scipy \
-   Pillow \
-   python-dateutil \
-   requests \
-   "awscli<2" \
-   mpi4py \
-   h5py \
-   absl-py \
-   opencv-python \
-   werkzeug \
-   urllib3 \
-   "protobuf<4"
-
-RUN ${PIP} --no-cache-dir install \
-    awkward>=2.4.6 \
+RUN python3 -m pip --no-cache-dir install \
     Pillow \
     h5py \
     ipdb \
@@ -237,7 +131,7 @@ RUN ${PIP} --no-cache-dir install \
     mock \
     networkx \
     numba \
-    numpy\ 
+    numpy \
     pandas\
     parsl \
     seaborn \
@@ -246,208 +140,29 @@ RUN ${PIP} --no-cache-dir install \
     tqdm \
     future \
     portpicker \
-    pyarrow    \
     uproot     \
+    uproot4    \
     vtk \
     enum34
 
-# Install AWS OFI NCCL plug-in
-RUN apt-get update && apt-get install -y autoconf
-RUN mkdir /tmp/efa-ofi-nccl \
-  && cd /tmp/efa-ofi-nccl \
-  && git clone https://github.com/aws/aws-ofi-nccl.git -b v$BRANCH_OFI \
-  && cd aws-ofi-nccl \
-  && ./autogen.sh \
-  && ./configure --with-libfabric=/opt/amazon/efa \
-  --with-mpi=/opt/amazon/openmpi \
-  --with-cuda=/usr/local/cuda \
-  --with-nccl=/usr/local --prefix=/usr/local \
-  && make -j $(nproc) \
-  && make install \
-  && rm -rf /tmp/efa-ofi-nccl
 
-# Allow OpenSSH to talk to containers without asking for confirmation
-RUN cat /etc/ssh/ssh_config | grep -v StrictHostKeyChecking > /etc/ssh/ssh_config.new \
-   && echo "    StrictHostKeyChecking no" >> /etc/ssh/ssh_config.new \
-   && mv /etc/ssh/ssh_config.new /etc/ssh/ssh_config
+# Options:
+#   tensorflow
+#   tf-nightly
+#   tf-nightly-gpu
+# Set --build-arg TF_PACKAGE_VERSION=1.11.0rc0 to install a specific version.
+# Installs the latest version by default.
+ARG TF_PACKAGE=tensorflow[and-cuda]
+ARG TF_PACKAGE_VERSION=2.16.1
+RUN python3 -m pip install --no-cache-dir ${TF_PACKAGE}${TF_PACKAGE_VERSION:+==${TF_PACKAGE_VERSION}}
 
-# Add NGC vars
-ENV TF_AUTOTUNE_THRESHOLD=2
-
-ADD https://raw.githubusercontent.com/aws/deep-learning-containers/master/src/deep_learning_container.py /usr/local/bin/deep_learning_container.py
-
-RUN chmod +x /usr/local/bin/deep_learning_container.py
-
-RUN curl https://aws-dlc-licenses.s3.amazonaws.com/tensorflow-${TF_VERSION}/license.txt -o /license.txt
-
-########################################################
-#  _____ ____ ____    ___
-# | ____/ ___|___ \  |_ _|_ __ ___   __ _  __ _  ___
-# |  _|| |     __) |  | || '_ ` _ \ / _` |/ _` |/ _ \
-# | |__| |___ / __/   | || | | | | | (_| | (_| |  __/
-# |_____\____|_____| |___|_| |_| |_|\__,_|\__, |\___|
-#                                         |___/
-#  ____           _
-# |  _ \ ___  ___(_)_ __   ___
-# | |_) / _ \/ __| | '_ \ / _ \
-# |  _ <  __/ (__| | |_) |  __/
-# |_| \_\___|\___|_| .__/ \___|
-#                  |_|
-########################################################
-
-FROM common AS ec2
-
-ARG TF_URL=https://framework-binaries.s3.us-west-2.amazonaws.com/tensorflow/r2.13_aws/gpu/2023-07-13-03-50/tensorflow_gpu-2.13.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-
-RUN ${PIP} install --no-cache-dir -U \
-   ${TF_URL} \
-   tensorflow-io \
-   tensorflow-datasets
-
-RUN HOME_DIR=/root \
-   && curl -o ${HOME_DIR}/oss_compliance.zip https://aws-dlinfra-utilities.s3.amazonaws.com/oss_compliance.zip \
-   && unzip ${HOME_DIR}/oss_compliance.zip -d ${HOME_DIR}/ \
-   && cp ${HOME_DIR}/oss_compliance/test/testOSSCompliance /usr/local/bin/testOSSCompliance \
-   && chmod +x /usr/local/bin/testOSSCompliance \
-   && chmod +x ${HOME_DIR}/oss_compliance/generate_oss_compliance.sh \
-   && ${HOME_DIR}/oss_compliance/generate_oss_compliance.sh ${HOME_DIR} ${PYTHON} \
-   && rm -rf ${HOME_DIR}/oss_compliance*
-
-# remove tmp files
-RUN rm -rf /tmp/*
-
-CMD ["/bin/bash"]
-
-#################################################################
-#  ____                   __  __       _
-# / ___|  __ _  __ _  ___|  \/  | __ _| | _____ _ __
-# \___ \ / _` |/ _` |/ _ \ |\/| |/ _` | |/ / _ \ '__|
-#  ___) | (_| | (_| |  __/ |  | | (_| |   <  __/ |
-# |____/ \__,_|\__, |\___|_|  |_|\__,_|_|\_\___|_|
-#              |___/
-#  ___                              ____           _
-# |_ _|_ __ ___   __ _  __ _  ___  |  _ \ ___  ___(_)_ __   ___
-#  | || '_ ` _ \ / _` |/ _` |/ _ \ | |_) / _ \/ __| | '_ \ / _ \
-#  | || | | | | | (_| | (_| |  __/ |  _ <  __/ (__| | |_) |  __/
-# |___|_| |_| |_|\__,_|\__, |\___| |_| \_\___|\___|_| .__/ \___|
-#                      |___/                        |_|
-#################################################################
-
-FROM common AS sagemaker
-
-LABEL maintainer="Amazon AI"
-LABEL dlc_major_version="1"
-
-ARG TF_URL=https://framework-binaries.s3.us-west-2.amazonaws.com/tensorflow/r2.13_aws/gpu/2023-07-13-03-50/tensorflow_gpu-2.13.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-
-# sagemaker-specific environment variable
-ENV SAGEMAKER_TRAINING_MODULE sagemaker_tensorflow_container.training:main
-
-# Need to install wheel before we can fix the pyyaml issue below
-RUN pip install wheel
-    
-# https://github.com/yaml/pyyaml/issues/601
-# PyYaml less than 6.0.1 failes to build with cython v3 and above.
-# tf-models-official uses older versions, breaking the install.
-# going to install the older pyyaml and cython to get tfd-models-official
-# the sagemaker package will revert pyyaml back to 6 for its requirement
-# and this is fine since sagemaker is more important than the models and
-# the models still work on pyyaml 6 in this context.
-RUN pip install "cython<3" "pyyaml<6" --no-build-isolation
-
-# https://github.com/tensorflow/models/issues/9267
-# tf-models does not respect existing installations of TF and always installs open source TF
-RUN ${PIP} install --no-cache-dir -U \
-    tf-models-official==2.13.0 \
-    tensorflow-text==2.13.0
-
-RUN ${PIP} uninstall -y tensorflow tensorflow-gpu \
-  ; ${PIP} install --no-cache-dir -U \
-    ${TF_URL} \
-    tensorflow-io \
-    tensorflow-datasets
-
-RUN $PYTHON -m pip install --no-cache-dir -U \
-    numba \
-    bokeh \
-    imageio \
-    opencv-python \
-    plotly \
-    seaborn \
-    shap
-
-RUN $PYTHON -m pip install --no-cache-dir -U \
-    "sagemaker<3" \
-    sagemaker-experiments==0.* \
-    sagemaker-tensorflow-training \
-    sagemaker-training \
-    "sagemaker-studio-analytics-extension<1" \
-    "sparkmagic<1" \
-    "sagemaker-studio-sparkmagic-lib<1" \
-    smclarify
-
-# install sagemaker-tensorflow from source
-ARG SAGEMAKER_TENSORFLOW_TAG=v1.19.0
-RUN git clone -b tf-2 https://github.com/aws/sagemaker-tensorflow-extensions.git \
-    && cd sagemaker-tensorflow-extensions \
-    && git checkout tags/$SAGEMAKER_TENSORFLOW_TAG -b $SAGEMAKER_TENSORFLOW_TAG \
-    && $PYTHON -m pip install . \
-    && cd .. && rm -rf sagemaker-tensorflow-extensions
-
-# install boost
-# tensorflow is compiled with --cxxopt="-D_GLIBCXX_USE_CXX11_ABI=1"
-RUN wget https://sourceforge.net/projects/boost/files/boost/1.82.0/boost_1_82_0.tar.gz/download -O boost_1_82_0.tar.gz \
-   && tar -xzf boost_1_82_0.tar.gz \
-   && cd boost_1_82_0 \
-   && ./bootstrap.sh \
-   && ./b2 define=_GLIBCXX_USE_CXX11_ABI=1 threading=multi --prefix=/usr -j 64 cxxflags=-fPIC cflags=-fPIC install || true \
-   && cd .. \
-   && rm -rf boost_1_82_0.tar.gz \
-   && rm -rf boost_1_82_0 \
-   && cd /usr/include/boost
-
-# Add NGC vars
-ENV TF_AUTOTUNE_THRESHOLD=2
-
-# Remove python kernel installed by sparkmagic
-RUN /usr/local/bin/jupyter-kernelspec remove -f python3
-
-# remove tmp files
-RUN rm -rf /tmp/*
-
-RUN HOME_DIR=/root \
-   && curl -o ${HOME_DIR}/oss_compliance.zip https://aws-dlinfra-utilities.s3.amazonaws.com/oss_compliance.zip \
-   && unzip ${HOME_DIR}/oss_compliance.zip -d ${HOME_DIR}/ \
-   && cp ${HOME_DIR}/oss_compliance/test/testOSSCompliance /usr/local/bin/testOSSCompliance \
-   && chmod +x /usr/local/bin/testOSSCompliance \
-   && chmod +x ${HOME_DIR}/oss_compliance/generate_oss_compliance.sh \
-   && ${HOME_DIR}/oss_compliance/generate_oss_compliance.sh ${HOME_DIR} ${PYTHON} \
-   && rm -rf ${HOME_DIR}/oss_compliance*
-
-CMD ["/bin/bash"]
-
-#Install graph nets package
-RUN ${PIP}  --no-cache-dir install graph_nets  "dm-sonnet>=2.0.0b0" tensorflow_probability
-
-#Install tendorflow optimisation package
-RUN ${PIP}  --no-cache-dir install --upgrade tensorflow-model-optimization
-
-#Install specific branch of hls4ml
-RUN git clone https://github.com/fastmachinelearning/hls4ml \
-    && cd hls4ml \
-    && git checkout main \
-    && pip install . \
-    && python setup.py install
-
-#Install qkeras
-RUN git clone --branch=master https://github.com/google/qkeras.git google/qkeras \
-    && cd google/qkeras \
-    && pip install . \
-    && python setup.py install
 
 RUN cd /lib/x86_64-linux-gnu \
     && ln -s libtinfo.so.6 libtinfo.so.5
 
-#ADD symlinks for vivado to work
+RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/libcuda.so
+
+ENV LD_LIBRARY_PATH /usr/local/lib/python3.10/dist-packages/nvidia//nvjitlink/lib:/usr/local/lib/python3.10/dist-packages/nvidia//nccl/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cusparse/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cusolver/lib:/usr/local/lib/python3.10/dist-packages/nvidia//curand/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cufft/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cudnn/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cuda_runtime/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cuda_nvrtc/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cuda_nvcc/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cuda_cupti/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cublas/lib:/usr/local/cuda/lib64/stubs:/usr/local/cuda-12.3/lib64:$LD_LIBRARY_PATH
+
 COPY bashrcFiles/bashrc /etc/bash.bashrc
 RUN chmod a+rwx /etc/bash.bashrc
