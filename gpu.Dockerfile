@@ -34,9 +34,9 @@ ENV PYTHONIOENCODING=UTF-8
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
-ARG PYTHON=python3.9
-ARG PIP=pip3
-ARG PYTHON_VERSION=3.9.10
+#ARG PYTHON=python3.9
+#ARG PIP=pip3
+#ARG PYTHON_VERSION=3.9.10
 
 #Tensorflow and cuda compatibility
 #https://www.tensorflow.org/install/source#gpu
@@ -47,9 +47,9 @@ ARG CUDA_DASH=12-3
 ARG CUDNN=8.9.7.29-1
 
 # To be passed to ec2 and sagemaker stages
-ENV PYTHON=${PYTHON}
-ENV PYTHON_VERSION=${PYTHON_VERSION}
-ENV PIP=${PIP}
+#ENV PYTHON=${PYTHON}
+#ENV PYTHON_VERSION=${PYTHON_VERSION}
+#ENV PIP=${PIP}
 
 RUN apt-get update && apt-get install -y --no-install-recommends --allow-unauthenticated --allow-downgrades  --allow-change-held-packages \
    ca-certificates \
@@ -137,6 +137,9 @@ RUN python3 -m pip --no-cache-dir install \
     seaborn \
     scipy \
     scikit-learn \
+    torch \
+    torchvision \
+    torchaudio \
     tqdm \
     future \
     portpicker \
@@ -163,6 +166,14 @@ RUN cd /lib/x86_64-linux-gnu \
 RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/libcuda.so
 
 ENV LD_LIBRARY_PATH /usr/local/lib/python3.10/dist-packages/nvidia//nvjitlink/lib:/usr/local/lib/python3.10/dist-packages/nvidia//nccl/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cusparse/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cusolver/lib:/usr/local/lib/python3.10/dist-packages/nvidia//curand/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cufft/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cudnn/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cuda_runtime/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cuda_nvrtc/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cuda_nvcc/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cuda_cupti/lib:/usr/local/lib/python3.10/dist-packages/nvidia//cublas/lib:/usr/local/cuda/lib64/stubs:/usr/local/cuda-12.3/lib64:$LD_LIBRARY_PATH
+
+COPY cudaEnv.sh /tmp/cudaEnv.sh
+COPY entrypoint.sh /tmp/entrypoint.sh
+
+RUN chmod 755 /tmp/cudaEnv.sh /tmp/entrypoint.sh
+
+#ENTRYPOINT ["/tmp/entrypoint.sh"]
+#CMD ["/tmp/cudaEnv.sh"]
 
 COPY bashrcFiles/bashrc /etc/bash.bashrc
 RUN chmod a+rwx /etc/bash.bashrc
