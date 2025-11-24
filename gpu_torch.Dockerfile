@@ -44,21 +44,30 @@ RUN pip install \
     Pillow \
     h5py \
     ipdb \
+    bokeh
+
+RUN pip install \
     matplotlib \
     graphviz \
     hist \
     jupyter \
-    keras_applications \
+    keras_applications
+
+RUN pip install \
     keras_preprocessing \
     mock \
-    networkx \
+    networkx
+
+RUN pip install \
     numba \
     numpy \
     pandas\
     parsl \
     seaborn \
     scipy \
-    scikit-learn \
+    scikit-learn
+
+RUN pip install \
     tqdm \
     future \
     portpicker \
@@ -66,8 +75,11 @@ RUN pip install \
     vtk \
     enum34
 
-RUN pip install executorch
-
+RUN pip install executorch \
+    onnxruntime \
+    onnx \
+    onnxscript
+    
 WORKDIR /workspace
 
 # Copy your application if needed
